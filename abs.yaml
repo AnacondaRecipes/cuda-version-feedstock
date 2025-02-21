@@ -1,4 +1,4 @@
-upload_without_merge: False
+upload_without_merge: True
 
 channels: [cuda12_def]
 

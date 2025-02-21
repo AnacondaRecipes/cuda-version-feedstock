@@ -1,0 +1,3 @@
+upload_without_merge: False
+
+channels: [cuda12_def]

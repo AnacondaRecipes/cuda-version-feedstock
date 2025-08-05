@@ -25,11 +25,12 @@ about:
   home: https://developer.nvidia.com/cuda-toolkit
   license_file: LICENSE.txt
   license: LicenseRef-NVIDIA-End-User-License-Agreement
-  license_url: https://docs.nvidia.com/cuda/eula/index.html
+  license_family: OTHER
   summary: A meta-package for pinning to a CUDA release version
   description: |
     A meta-package for pinning to a CUDA release version
   doc_url: https://docs.nvidia.com/cuda/index.html
+  dev_url: https://github.com/conda-forge/cuda-version-feedstock
 
 extra:
   recipe-maintainers:

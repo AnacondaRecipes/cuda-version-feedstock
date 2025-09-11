@@ -6,3 +6,4 @@ build_env_vars:
 staging_channel_upload_target: sk-test-cuda128
 channels:
 - https://staging.continuum.io/pbp/sk-test-cuda128
+

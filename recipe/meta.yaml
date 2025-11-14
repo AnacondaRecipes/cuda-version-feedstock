@@ -7,8 +7,11 @@ source:
   sha256: e2c71babfd18a8e69542dd7e9ca018f9caa438094001a58e6bc4d8c999bf0d07
 
 build:
+  # The build number is used to identify the recipe version
   number: 3
   noarch: generic
+  # Add this selector to build this noarch package only on linux runners
+  skip: true  # [(not (linux and not aarch64))]
 
 requirements:
   run_constrained:
@@ -30,7 +33,12 @@ about:
   description: |
     A meta-package for pinning to a CUDA release version
   doc_url: https://docs.nvidia.com/cuda/index.html
+  dev_url: https://docs.nvidia.com/cuda/index.html
 
 extra:
+  skip-lints:
+    - license_file_overspecified
+    - cdts_must_be_in_build
+    - cdts_for_linux_only
   recipe-maintainers:
     - conda-forge/cuda

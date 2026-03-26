@@ -1,5 +1,5 @@
 package:
-  name: cuda-version
+  name: cuda-version-split
   version: {{ version }}
 
 source:
@@ -7,38 +7,130 @@ source:
   sha256: e2c71babfd18a8e69542dd7e9ca018f9caa438094001a58e6bc4d8c999bf0d07
 
 build:
-  # The build number is used to identify the recipe version
-  number: 3
+  number: 4
   noarch: generic
-  # Add this selector to build this noarch package only on linux runners
-  skip: true  # [(not (linux and not aarch64))]
+  # Add 'linux64' selector to build this noarch package only on linux x86_64 runners
+  skip: true  # [not linux64]
 
-requirements:
-  run_constrained:
-    {% if version is defined %}                  # Safe-guard for early parsing
-    - __cuda >={{ version.split(".", 1)[0] }}    # Major version is lower bound
-    - cudatoolkit {{ version }}|{{ version }}.*  # Align `cudatoolkit` version
-    {% endif %}
+outputs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Output 1: cuda-version
+  #
+  # Build-time coordination package. When downstream recipes list
+  # cuda-version in their host dependencies, the solver forces all
+  # CUDA libraries to resolve to builds from the same toolkit release.
+  # Without it, the solver could mix builds from different CUDA versions.
+  #
+  # cuda-version is designed for host dependencies, but for runtime
+  # GPU requirements, using cuda-requires is a better approach.
+  #
+  # Ref: https://github.com/conda-forge/cuda-version-feedstock/issues/17
+  # ──────────────────────────────────────────────────────────────────────
+  - name: cuda-version
+    requirements:
+      run_constrained:
+        {% if version is defined %}                  # Safe-guard for early parsing
+        - __cuda >={{ version.split(".", 1)[0] }}    # Major version is lower bound
+        - cudatoolkit {{ version }}|{{ version }}.*  # Align `cudatoolkit` version
+        {% endif %}
+    test:
+      commands:
+        - exit 0
+    about:
+      home: https://developer.nvidia.com/cuda-toolkit
+      license_file: LICENSE.txt
+      license: LicenseRef-NVIDIA-End-User-License-Agreement
+      license_url: https://docs.nvidia.com/cuda/eula/index.html
+      summary: A meta-package for pinning to a CUDA release version
+      description: |
+        A meta-package for pinning to a CUDA release version
+      doc_url: https://docs.nvidia.com/cuda/index.html
+      dev_url: https://docs.nvidia.com/cuda/index.html
 
-test:
-  commands:
-    - exit 0
+  # ──────────────────────────────────────────────────────────────────────
+  # Output 2: cuda-requires
+  #
+  # Runtime abstraction over conda virtual packages (__cuda, __cuda_arch).
+  # Downstream CUDA packages should depend on cuda-requires instead of
+  # referencing __cuda or __cuda_arch directly.
+  #
+  # Why this exists:
+  #   - Single control point: if virtual package semantics ever change
+  #     (naming, versioning, platform behavior), we update this one
+  #     recipe instead of every CUDA consumer.
+  #   - Clean place to add __cuda_arch constraints without touching
+  #     downstream recipes.
+  #   - Makes the runtime contract explicit: "this package requires a
+  #     GPU with driver >= X.Y and compute capability >= Z."
+  #
+  # On systems without an NVIDIA driver, __cuda won't exist and the
+  # solver will correctly refuse to install this — which is the desired
+  # behavior for a package that declares "a GPU is required."
+  #
+  # Note on run_exports:
+  #   This package does NOT declare run_exports. run_exports only
+  #   triggers when a package appears in host or build, but
+  #   cuda-requires has no headers or libraries to link against — it
+  #   is a pure metadata package that belongs directly in run.
+  #   Adding run_exports here would have no practical effect.
+  #
+  #   If automatic propagation is desired in the future, the right
+  #   approach is to add run_exports entries on CUDA library packages
+  #   (e.g., libcublas, libcufft) that point TO cuda-requires. That
+  #   way, any recipe that links against a CUDA library automatically
+  #   picks up cuda-requires at runtime. That is a change to those
+  #   library recipes, not to this one.
+  # ──────────────────────────────────────────────────────────────────────
+  - name: cuda-requires
+    requirements:
+      run:
+        # Hard runtime requirement: the system must have a compatible
+        # NVIDIA driver installed. The __cuda virtual package is
+        # provided by conda based on the detected driver version.
+        - __cuda >={{ version }}
 
-about:
-  home: https://developer.nvidia.com/cuda-toolkit
-  license_file: LICENSE.txt
-  license: LicenseRef-NVIDIA-End-User-License-Agreement
-  license_url: https://docs.nvidia.com/cuda/eula/index.html
-  summary: A meta-package for pinning to a CUDA release version
-  description: |
-    A meta-package for pinning to a CUDA release version
-  doc_url: https://docs.nvidia.com/cuda/index.html
-  dev_url: https://docs.nvidia.com/cuda/index.html
+        # Uncomment when ready to enforce minimum compute capability.
+        # The floor should match what the corresponding CUDA toolkit
+        # actually supports (e.g., CUDA 12.x requires sm_50+).
+        # - __cuda_arch >=50                                   # sm_50
+
+      run_constrained:
+        # cuda-version is a BUILD-TIME coordination package. Downstream
+        # recipes list it in host so the solver aligns all CUDA
+        # libraries to the same toolkit release. While it can appear
+        # in run, cuda-requires is the preferred way to express
+        # runtime GPU requirements.
+        #
+        # This entry does NOT pull cuda-version into the environment.
+        # It says: "IF cuda-version is present, it must be >= what this
+        # cuda-requires was built for." This catches dangerous downward
+        # mismatches at solve time — e.g., cuda-requires >=12.6 with
+        # cuda-version 12.4 — instead of letting them surface as
+        # mysterious runtime failures.
+        #
+        # The >= pin (rather than ==) is intentional: a newer
+        # cuda-version in the environment is fine; an older one is the
+        # real problem.
+        - cuda-version >={{ version }}
+    test:
+      commands:
+        - exit 0
+    about:
+      home: https://developer.nvidia.com/cuda-toolkit
+      license_file: LICENSE.txt
+      license: LicenseRef-NVIDIA-End-User-License-Agreement
+      license_url: https://docs.nvidia.com/cuda/eula/index.html
+      summary: A meta-package for abstracting CUDA runtime requirements
+      description: |
+        cuda-requires is a thin wrapper around conda virtual packages.
+        Downstream CUDA packages should depend on cuda-requires instead
+        of referencing __cuda or __cuda_arch directly. This gives the
+        packaging team a single control point to adjust driver and
+        architecture requirements without modifying every consumer recipe.
+      doc_url: https://docs.nvidia.com/cuda/index.html
+      dev_url: https://docs.nvidia.com/cuda/index.html
 
 extra:
-  skip-lints:
-    - license_file_overspecified
-    - cdts_must_be_in_build
-    - cdts_for_linux_only
   recipe-maintainers:
     - conda-forge/cuda
+    - onurbingol

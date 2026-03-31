@@ -10,8 +10,8 @@ build:
   # The build number is used to identify the recipe version
   number: 3
   noarch: generic
-  # Add this selector to build this noarch package only on linux runners
-  skip: true  # [(not (linux and not aarch64))]
+  # Add this selector to build this noarch package only on linux x86-64 runners
+  skip: true  # [not linux64]
 
 requirements:
   run_constrained:
@@ -37,7 +37,6 @@ about:
 
 extra:
   skip-lints:
-    - license_file_overspecified
     - cdts_must_be_in_build
     - cdts_for_linux_only
   recipe-maintainers:
